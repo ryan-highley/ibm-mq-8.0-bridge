@@ -1,0 +1,24 @@
+FROM registry.access.redhat.com/rhel7.2:latest
+
+MAINTAINER Ryan Highley <rhighley@redhat.com>
+
+RUN yum --assumeyes install tar bc && \
+  yum clean all
+
+RUN useradd -u 501 -c "IBM MQ User" mqm
+
+ADD WSMQ_8.0.0.4_TRIAL_LNX_ON_X86_64_.tar.gz /opt/
+
+RUN /opt/MQServer/mqlicense.sh -accept && \
+  yum --assumeyes localinstall /opt/MQServer/MQ*.rpm && \
+  rm -rf /opt/MQServer/ && \
+  /opt/mqm/bin/setmqinst -i -p /opt/mqm
+
+EXPOSE 1414
+
+USER mqm
+
+RUN crtmqm -u DLQ -p 1414 -q DEV_QMGR
+
+#ENTRYPOINT strmqm DEV_QMGR
+#CMD runmqsc DEV_QMGR

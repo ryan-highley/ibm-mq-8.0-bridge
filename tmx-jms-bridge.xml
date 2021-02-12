@@ -1,0 +1,168 @@
+<?xml version="1.0"?>
+<blueprint xmlns="http://www.osgi.org/xmlns/blueprint/v1.0.0"
+  xmlns:cm="http://aries.apache.org/blueprint/xmlns/blueprint-cm/v1.1.0"
+  xmlns:camel="http://camel.apache.org/schema/blueprint" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="
+    http://www.osgi.org/xmlns/blueprint/v1.0.0                   https://www.osgi.org/xmlns/blueprint/v1.0.0/blueprint.xsd
+    http://aries.apache.org/blueprint/xmlns/blueprint-cm/v1.1.0  http://aries.apache.org/schemas/blueprint-cm/blueprint-cm-1.1.0.xsd
+    http://camel.apache.org/schema/blueprint                     http://camel.apache.org/schema/blueprint/camel-blueprint.xsd
+  ">
+  <cm:property-placeholder id="tmx.jms.bridge.placeholder"
+    persistent-id="tmx.jms.bridge.blueprint" update-strategy="reload">
+    <cm:default-properties>
+      <cm:property name="amq.connection.brokerURL" value="vm://amq?create=false" />
+      <cm:property name="amq.connection.userName" value="admin" />
+      <cm:property name="amq.connection.password" value="admin" />
+      <cm:property name="amq.queue.cds.to.cdcc" value="activemq:queue:BRIDGE.FROM.CDS.TO.CDCC" />
+      <cm:property name="amq.queue.cdcc.to.cds" value="activemq:queue:BRIDGE.FROM.CDCC.TO.CDS" />
+
+      <cm:property name="wmqCDS.connection.transportType" value="1" /> <!-- CLIENT -->
+      <cm:property name="wmqCDS.connection.hostName" value="205.207.130.249" />
+      <cm:property name="wmqCDS.connection.port" value="1414" />
+      <cm:property name="wmqCDS.connection.queueManager" value="IQB2" />
+
+      <cm:property name="wmqCDS.queue.receive" value="RQ.C2.NM.EXTOB.CDC.001" />
+      <cm:property name="wmqCDS.queue.receive.uri" value="ref:wmqCDSRecv" />
+      <cm:property name="wmqCDS.queue.send" value="LQ.C2.NM.EXTIB.MAINQ.001" />
+      <cm:property name="wmqCDS.queue.send.uri" value="ref:wmqCDSSend" />
+
+      <cm:property name="wmqCDCC.connection.transportType" value="1" /> <!-- CLIENT -->
+      <cm:property name="wmqCDCC.connection.hostName" value="142.201.190.112" />
+      <cm:property name="wmqCDCC.connection.port" value="10014" />
+      <cm:property name="wmqCDCC.connection.queueManager" value="CDCCQTQM01" />
+
+      <cm:property name="wmqCDCC.queue.receive" value="CDS.OUT" />
+      <cm:property name="wmqCDCC.queue.receive.uri" value="ref:wmqCDCCRecv" />
+      <cm:property name="wmqCDCC.queue.send" value="CDS.IN" />
+      <cm:property name="wmqCDCC.queue.send.uri" value="ref:wmqCDCCSend" />
+    </cm:default-properties>
+  </cm:property-placeholder>
+
+  <bean id="amqConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
+    <property name="brokerURL" value="${amq.connection.brokerURL}" />
+    <property name="userName" value="${amq.connection.userName}" />
+    <property name="password" value="${amq.connection.password}" />
+  </bean>
+  <bean id="amqConfig" class="org.apache.camel.component.jms.JmsConfiguration">
+    <property name="connectionFactory" ref="amqConnectionFactory" />
+    <property name="concurrentConsumers" value="10" />
+    <property name="jmsMessageType" value="Text" />
+    <property name="includeAllJMSXProperties" value="true" />
+    <property name="includeSentJMSMessageID" value="true" />
+  </bean>
+  <bean id="activemq" class="org.apache.activemq.camel.component.ActiveMQComponent">
+    <property name="configuration" ref="amqConfig" />
+  </bean>
+
+  <bean id="wmqCDSConnectionFactory" class="com.ibm.mq.jms.MQConnectionFactory">
+    <property name="transportType" value="${wmqCDS.connection.transportType}" />
+    <property name="hostName" value="${wmqCDS.connection.hostName}" />
+    <property name="port" value="${wmqCDS.connection.port}" />
+    <property name="queueManager" value="${wmqCDS.connection.queueManager}" />
+  </bean>
+  <bean id="wmqCDSCredentialsConnectionFactory"
+    class="org.springframework.jms.connection.UserCredentialsConnectionFactoryAdapter">
+    <property name="targetConnectionFactory" ref="wmqCDSConnectionFactory" />
+    <property name="username" value="CDCMLA1" />
+    <property name="password" value="" />
+  </bean>
+  <bean id="wmqCDSConfig" class="org.apache.camel.component.jms.JmsConfiguration">
+    <property name="connectionFactory" ref="wmqCDSCredentialsConnectionFactory" />
+    <property name="concurrentConsumers" value="10" />
+    <property name="jmsMessageType" value="Text" />
+    <property name="includeAllJMSXProperties" value="true" />
+    <property name="includeSentJMSMessageID" value="true" />
+  </bean>
+  <bean id="wmqCDSQueueRecv" class="com.ibm.mq.jms.MQQueue">
+    <argument index="0" value="${wmqCDS.queue.receive}" />
+    <property name="targetClient" value="1" />
+    <property name="MQMDReadEnabled" value="true" />
+  </bean>
+  <bean id="wmqCDSRecv" class="org.apache.camel.component.jms.JmsQueueEndpoint">
+    <argument index="0" ref="wmqCDSQueueRecv" />
+    <property name="configuration" ref="wmqCDSConfig" />
+    <property name="exchangePattern" value="InOnly" />
+  </bean>
+  <bean id="wmqCDSQueueSend" class="com.ibm.mq.jms.MQQueue">
+    <argument index="0" value="${wmqCDS.queue.send}" />
+    <property name="targetClient" value="1" />
+    <property name="MQMDReadEnabled" value="true" />
+  </bean>
+  <bean id="wmqCDSSend" class="org.apache.camel.component.jms.JmsQueueEndpoint">
+    <argument index="0" ref="wmqCDSQueueSend" />
+    <property name="configuration" ref="wmqCDSConfig" />
+  </bean>
+
+  <bean id="wmqCDCCConnectionFactory" class="com.ibm.mq.jms.MQConnectionFactory">
+    <property name="transportType" value="${wmqCDCC.connection.transportType}" />
+    <property name="hostName" value="${wmqCDCC.connection.hostName}" />
+    <property name="port" value="${wmqCDCC.connection.port}" />
+    <property name="queueManager" value="${wmqCDCC.connection.queueManager}" />
+  </bean>
+  <bean id="wmqCDCCCredentialsConnectionFactory"
+    class="org.springframework.jms.connection.UserCredentialsConnectionFactoryAdapter">
+    <property name="targetConnectionFactory" ref="wmqCDCCConnectionFactory" />
+    <property name="username" value="CDCMLA1" />
+    <property name="password" value="" />
+  </bean>
+  <bean id="wmqCDCCConfig" class="org.apache.camel.component.jms.JmsConfiguration">
+    <property name="connectionFactory" ref="wmqCDCCCredentialsConnectionFactory" />
+    <property name="concurrentConsumers" value="10" />
+    <property name="jmsMessageType" value="Text" />
+    <property name="includeAllJMSXProperties" value="true" />
+    <property name="includeSentJMSMessageID" value="true" />
+  </bean>
+  <bean id="wmqCDCCQueueRecv" class="com.ibm.mq.jms.MQQueue">
+    <argument index="0" value="${wmqCDCC.queue.receive}" />
+    <property name="targetClient" value="1" />
+    <property name="MQMDReadEnabled" value="true" />
+  </bean>
+  <bean id="wmqCDCCRecv" class="org.apache.camel.component.jms.JmsQueueEndpoint">
+    <argument index="0" ref="wmqCDCCQueueRecv" />
+    <property name="configuration" ref="wmqCDCCConfig" />
+    <property name="exchangePattern" value="InOnly" />
+  </bean>
+  <bean id="wmqCDCCQueueSend" class="com.ibm.mq.jms.MQQueue">
+    <argument index="0" value="${wmqCDCC.queue.send}" />
+    <property name="targetClient" value="1" />
+    <property name="MQMDReadEnabled" value="true" />
+  </bean>
+  <bean id="wmqCDCCSend" class="org.apache.camel.component.jms.JmsQueueEndpoint">
+    <argument index="0" ref="wmqCDCCQueueSend" />
+    <property name="configuration" ref="wmqCDCCConfig" />
+  </bean>
+
+  <camel:camelContext xmlns="http://camel.apache.org/schema/blueprint">
+    <route id="from-wmqcds-to-amq">
+      <from uri="{{wmqCDS.queue.receive.uri}}" />
+      <unmarshal>
+        <string charset="Cp037" />
+      </unmarshal>
+      <convertBodyTo type="java.lang.String" charset="US-ASCII" />
+      <to uri="log:from-wmqCDS-to-amq?showAll=true" />
+      <to uri="{{amq.queue.cds.to.cdcc}}" />
+    </route>
+    <route id="from-amq-to-wmqcds">
+      <from uri="{{amq.queue.cdcc.to.cds}}" />
+      <setHeader headerName="JMS_IBM_Character_Set">
+        <constant>500</constant>
+      </setHeader>
+      <to uri="log:from-amq-to-wmqCDS?showAll=true" />
+      <to uri="{{wmqCDS.queue.send.uri}}" />
+    </route>
+    <route id="from-wmqcdcc-to-amq">
+      <from uri="{{wmqCDCC.queue.receive.uri}}" />
+      <convertBodyTo type="java.lang.String" />
+      <to uri="log:from-wmqCDCC-to-amq?showAll=true" />
+      <to uri="{{amq.queue.cdcc.to.cds}}" />
+    </route>
+    <route id="from-amq-to-wmqcdcc">
+      <from uri="{{amq.queue.cds.to.cdcc}}" />
+      <setHeader headerName="JMS_IBM_Character_Set">
+        <constant>367</constant>
+      </setHeader>
+      <to uri="log:from-amq-to-wmqCDCC?showAll=true" />
+      <to uri="{{wmqCDCC.queue.send.uri}}" />
+    </route>
+  </camel:camelContext>
+</blueprint>
